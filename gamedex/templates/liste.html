@@ -1,0 +1,19 @@
+{{template "header" .}}
+
+<h1>Les jeux</h1>
+
+{{if .Query}}
+	<p>Vous avez cherché : <strong>{{.Query}}</strong></p>
+{{end}}
+
+<ul>
+	{{range .Games}}
+		<li>
+			<a href="/jeux/{{.ID}}">{{.Name}}</a> ({{.Year}} · {{.Studio}})
+		</li>
+	{{else}}
+		<li>Aucun jeu trouvé.</li>
+	{{end}}
+</ul>
+
+{{template "footer" .}}
