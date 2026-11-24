@@ -1,59 +1,84 @@
 package main
 
 import (
-	"flag"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
+	"os"
+	"time"
 )
 
+type Game struct {
+	ID     int      `json:"id"`
+	Name   string   `json:"name"`
+	Year   int      `json:"year"`
+	Studio string   `json:"studio"`
+	Genres []string `json:"genres"`
+}
+
+type Tournament struct {
+	ID     int     `json:"id"`
+	GameID int     `json:"gameId"`
+	Name   string  `json:"name"`
+	City   string  `json:"city"`
+	Date   string  `json:"date"`
+	Lat    float64 `json:"lat"`
+	Lng    float64 `json:"lng"`
+}
+
+var client = &http.Client{Timeout: 3 * time.Second}
+
+func FetchGames() ([]Game, error) {
+	resp, err := client.Get("http://localhost:8081/api/games")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("l'API a répondu %d", resp.StatusCode)
+	}
+
+	var games []Game
+	err = json.NewDecoder(resp.Body).Decode(&games)
+	return games, err
+}
+
+func FetchTournaments() ([]Tournament, error) {
+	resp, err := client.Get("http://localhost:8081/api/tournaments")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("l'API a répondu %d", resp.StatusCode)
+	}
+
+	var tournaments []Tournament
+	err = json.NewDecoder(resp.Body).Decode(&tournaments)
+	return tournaments, err
+}
+
 func main() {
-	port := flag.Int("port", 8080, "port du serveur")
-	flag.Parse()
-
-	mux := http.NewServeMux()
-
-	fs := http.FileServer(http.Dir("static"))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", fs))
-
-	mux.HandleFunc("GET /{$}", accueil)
-	mux.HandleFunc("GET /jeux", listeJeux)
-	mux.HandleFunc("GET /jeux/{id}", detailJeu)
-
-	addr := fmt.Sprintf(":%d", *port)
-	fmt.Printf("Serveur sur http://localhost%s\n", addr)
-	http.ListenAndServe(addr, mux)
-}
-
-func accueil(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintln(w, `<!DOCTYPE html>
-<html lang="fr">
-<head>
-	<meta charset="utf-8">
-	<title>GameDex</title>
-	<link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-	<h1>Bienvenue sur GameDex</h1>
-	<p><a href="/jeux">Voir la liste des jeux</a></p>
-</body>
-</html>`)
-}
-
-func listeJeux(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, "Liste des jeux")
-}
-
-func detailJeu(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || id < 1 {
-		http.Error(w, "identifiant invalide", http.StatusBadRequest)
-		return
+	games, err := FetchGames()
+	if err != nil {
+		fmt.Println("Erreur lors de la récupération des jeux :", err)
+		os.Exit(1)
 	}
-	if id > 12 {
-		http.NotFound(w, r)
-		return
+
+	tournaments, err := FetchTournaments()
+	if err != nil {
+		fmt.Println("Erreur lors de la récupération des tournois :", err)
+		os.Exit(1)
 	}
-	fmt.Fprintf(w, "Fiche du jeu %d\n", id)
+
+	byGame := make(map[int][]Tournament)
+	for _, t := range tournaments {
+		byGame[t.GameID] = append(byGame[t.GameID], t)
+	}
+
+	for _, g := range games {
+		fmt.Printf("%-22s (%d)  %d tournoi(s)\n", g.Name, g.Year, len(byGame[g.ID]))
+	}
 }
